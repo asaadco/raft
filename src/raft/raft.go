@@ -60,9 +60,8 @@ type Raft struct {
 	Heartbeat_Timer   *time.Ticker
 	ElectionResetTime time.Time
 	Election_Started  bool
-	CommitIndex       int
-	LastApplied       int
-
+	CommitIndex       int // index of highest log entry known to be committed
+	LastApplied       int // index of highest log entry applied to state machine
 	VoteCount  int
 	NextIndex  []int // For each server, index of the next log entry to send to that server. It is initialized to leader last log index + 1
 	MatchIndex []int // For each server, index of the highest log entry known to  be replicated on server (initiailized to 0, increases monotonically)
@@ -91,14 +90,14 @@ func (rf *Raft) SendAppendEntry(server int, args AppendEntryArgs, reply *AppendE
 
 func (rf *Raft) AppendEntry(args AppendEntryArgs, reply *AppendEntryReply) {
 	if args.LeaderTerm < rf.CurrentTerm {
-		print("Leader Term is ", args.LeaderTerm, " Follower term is ", rf.CurrentTerm, "\n")
+		// print("Leader Term is ", args.LeaderTerm, " Follower term is ", rf.CurrentTerm, "\n")
 		reply.TermRply = rf.CurrentTerm
 		reply.SuccessRply = false
 
 		return
 	}
 	if args.LeaderTerm > rf.CurrentTerm {
-		print("[", rf.CurrentTerm, "] ", rf.me, " REC HRTBT FROM ", args.LeaderId, "\n")
+		// print("[", rf.CurrentTerm, "] ", rf.me, " REC HRTBT FROM ", args.LeaderId, "\n")
 		rf.Follow(args.LeaderTerm)
 
 	}
@@ -120,7 +119,7 @@ func (rf *Raft) Heartbeat_Ticker() {
 		rf.do_Heartbeat()
 		<-rf.Heartbeat_Timer.C
 		if rf.State != 2 {
-			print(rf.me, " is not leader anymore. Stopping heartbeats.\n")
+			// print(rf.me, " is not leader anymore. Stopping heartbeats.\n")
 			return
 		}
 	}
@@ -149,12 +148,12 @@ func (rf *Raft) send_Heartbeat(i int, SavedTerm int) {
 	if rf.State != 2 {
 		return
 	}
-	ok := rf.SendAppendEntry(i, args, &reply)
-	print("[", rf.CurrentTerm, "]", "[HEARTBEAT] FROM ", rf.me, " SENT TO ", i, " and reply was ", ok, " Their reply.term is ", reply.TermRply, "\n")
+	_ = rf.SendAppendEntry(i, args, &reply)
+	// print("[", rf.CurrentTerm, "]", "[HEARTBEAT] FROM ", rf.me, " SENT TO ", i, " and reply was ", ok, " Their reply.term is ", reply.TermRply, "\n")
 
 	if reply.TermRply > SavedTerm {
-		print("Stepping down from leadership ", rf.me, "->", i, ":", reply.TermRply, ">", rf.CurrentTerm, "\n")
-		print("<", rf.me, ">", " State: ", rf.State, "\n")
+		// print("Stepping down from leadership ", rf.me, "->", i, ":", reply.TermRply, ">", rf.CurrentTerm, "\n")
+		// print("<", rf.me, ">", " State: ", rf.State, "\n")
 		rf.Follow(reply.TermRply)
 		return
 	}
@@ -240,7 +239,7 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 	}
 	if (rf.VotedFor == -1 || rf.VotedFor == args.CandidateId) && rf.CurrentTerm == args.Term {
 		reply.VoteGranted = true
-		print(rf.me, " votes for ", args.CandidateId, "\n", rf.me, " term is ", args.Term, "\n")
+		// print(rf.me, " votes for ", args.CandidateId, "\n", rf.me, " term is ", args.Term, "\n")
 		rf.VotedFor = args.CandidateId
 		rf.ElectionResetTime = time.Now()
 
@@ -341,13 +340,13 @@ func (rf *Raft) send_VoteRequest(i int, term int) {
 	// SEND VOTE REQUEST
 	reply := RequestVoteReply{}
 	ok := rf.sendRequestVote(i, args, &reply)
-	print("SENT [VOTE REQUEST] FROM ", rf.me, " TO ", i, "\n")
+	// print("SENT [VOTE REQUEST] FROM ", rf.me, " TO ", i, "\n")
 	if rf.State != 1 {
 		return
 	}
 	if ok == true {
 
-		print("RECV [VOTE REQUEST REPLY] FROM ", i, " TO ", rf.me, " [", term, ", ", reply.CurrentTerm, "]", "\n")
+		// print("RECV [VOTE REQUEST REPLY] FROM ", i, " TO ", rf.me, " [", term, ", ", reply.CurrentTerm, "]", "\n")
 		if reply.CurrentTerm > term {
 			rf.Follow(reply.CurrentTerm)
 			return
@@ -363,8 +362,8 @@ func (rf *Raft) send_VoteRequest(i int, term int) {
 					rf.Election_Started = false
 
 					rf.CurrentTerm = term
-					print("Leader is ", rf.me, " with term = ", rf.CurrentTerm, "\n")
-					print(rf.me, " is sending heartbeats... \n")
+					// print("Leader is ", rf.me, " with term = ", rf.CurrentTerm, "\n")
+					// print(rf.me, " is sending heartbeats... \n")
 
 					go rf.Heartbeat_Ticker()
 					return
@@ -401,8 +400,8 @@ func (rf *Raft) do_Election() {
 
 	// Timeout = time.Duration(int64(150)+rand.Int63n(300)) * time.Millisecond
 
-	print("Server ", rf.me, " times out ", "\n")
-	print("[ELECTION] Candidate is ", rf.me, " for term = ", rf.CurrentTerm, "\n")
+	// print("Server ", rf.me, " times out ", "\n")
+	// print("[ELECTION] Candidate is ", rf.me, " for term = ", rf.CurrentTerm, "\n")
 
 	for i := range rf.peers {
 		if i != rf.me {
@@ -430,7 +429,7 @@ func (rf *Raft) Election_Ticker() {
 			return
 		}
 		if time.Since(rf.ElectionResetTime) > timeout_interval {
-			print("Attempting election with ", rf.me, " and in state: ", rf.State, " and Term:", rf.CurrentTerm, "\n")
+			// print("Attempting election with ", rf.me, " and in state: ", rf.State, " and Term:", rf.CurrentTerm, "\n")
 			rf.do_Election()
 			return
 		}
@@ -455,8 +454,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rand.Seed(time.Now().UnixNano())
 	rf.HeartbeatTimeout = time.Duration(int64(time.Millisecond) * int64(int64(300)+rand.Int63n(100)))
-	rf.CommitIndex = -1
-	rf.LastApplied = -1
+	rf.CommitIndex = 0
+	rf.LastApplied = 0
 	for i := 0; i < len(peers); i++ {
 		rf.NextIndex = append(rf.NextIndex, 1)
 		rf.MatchIndex = append(rf.MatchIndex, 0)
